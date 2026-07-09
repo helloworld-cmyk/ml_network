@@ -379,6 +379,14 @@
       box-shadow: var(--shadow);
     }
 
+    .question-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
     .question-badge {
       display: inline-flex;
       align-items: center;
@@ -389,10 +397,44 @@
       font-weight: 600;
       padding: 4px 12px;
       border-radius: 20px;
-      margin-bottom: 16px;
     }
 
     .question-badge.multi { background: var(--warning-bg); color: var(--warning); }
+
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+
+    .copy-btn:hover {
+      color: var(--accent-light);
+      border-color: rgba(99,102,241,0.4);
+      background: rgba(99,102,241,0.08);
+    }
+
+    .copy-btn.copied {
+      color: var(--success);
+      border-color: rgba(34,197,94,0.4);
+      background: var(--success-bg);
+    }
+
+    .copy-btn svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
 
     .question-text {
       font-size: 1.05rem;
@@ -1440,6 +1482,53 @@ ans: A,C
         .replace(/"/g, '&quot;');
     }
 
+    function stripMarkdownForCopy(text) {
+      return String(text)
+        .replace(/\{pkfk\}(.+?)\{\/pkfk\}/gi, '$1')
+        .replace(/\{pk\}(.+?)\{\/pk\}/gi, '$1')
+        .replace(/\{fk\}(.+?)\{\/fk\}/gi, '$1')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/__(.+?)__/g, '$1')
+        .replace(/_(.+?)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/^#+\s+/gm, '')
+        .trim();
+    }
+
+    function formatQuestionForCopy(q) {
+      const lines = [`Câu ${q.number}: ${stripMarkdownForCopy(q.questionText)}`];
+
+      if (q.images?.length) {
+        q.images.forEach((src) => lines.push(`[Hình minh họa: ${src}]`));
+      }
+
+      Object.keys(q.options).sort().forEach((letter) => {
+        lines.push(`${letter}. ${stripMarkdownForCopy(q.options[letter])}`);
+      });
+
+      return lines.join('\n');
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+      }
+    }
+
     function renderExplanationHtml(q, basePath) {
       if (!q.explanation) return '';
       return `
@@ -1910,7 +1999,16 @@ ans: A,C
       $('#mainBody').innerHTML = `
         <div class="quiz-layout">
           <div class="question-card">
-            ${badgeHtml}
+            <div class="question-card-header">
+              ${badgeHtml}
+              <button type="button" class="copy-btn" id="btnCopyQuestion" title="Copy toàn bộ câu hỏi để tra mạng">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+                <span class="copy-btn-label">Copy câu hỏi</span>
+              </button>
+            </div>
             <div class="question-text">
               <strong>Câu ${q.number}:</strong>
               <div>${renderMarkdown(q.questionText, f.basePath)}</div>
@@ -1964,6 +2062,26 @@ ans: A,C
 
     function bindQuizEvents(f, q, idx) {
       const key = String(q.number);
+
+      $('#btnCopyQuestion')?.addEventListener('click', async () => {
+        const text = formatQuestionForCopy(q);
+        const ok = await copyText(text);
+        if (!ok) {
+          toast('Không copy được — thử lại');
+          return;
+        }
+
+        const btn = $('#btnCopyQuestion');
+        const label = btn.querySelector('.copy-btn-label');
+        const prev = label?.textContent || 'Copy câu hỏi';
+        btn.classList.add('copied');
+        if (label) label.textContent = 'Đã copy!';
+        toast('Đã copy câu hỏi — dán vào Google để tra');
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          if (label) label.textContent = prev;
+        }, 2000);
+      });
 
       $('#essayInput')?.addEventListener('input', (e) => {
         const value = e.target.value;
