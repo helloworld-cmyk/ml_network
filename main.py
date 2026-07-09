@@ -7,6 +7,7 @@ Usage:
   python main.py capture -- --dpi 150
   python main.py local -- -o .md/out.md --start-page 8
   python main.py ollama -- --model glm-ocr
+  python main.py mistral -- rawtext/ComputerNetwork_Quiz_Bank.pdf
 """
 
 from __future__ import annotations
@@ -55,6 +56,13 @@ COMMANDS: tuple[Command, ...] = (
 		label="OCR qua Ollama",
 		description="OCR ảnh bằng Ollama (core/script.py)",
 		script=PROJECT_ROOT / "core" / "script.py",
+	),
+	Command(
+		key="mistral",
+		aliases=("mis", "mistral-ocr"),
+		label="OCR qua Mistral",
+		description="OCR PDF thẳng bằng Mistral Document QnA (core/mistral.py)",
+		script=PROJECT_ROOT / "core" / "mistral.py",
 	),
 )
 
@@ -149,6 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
 			"  python main.py capture -- input.pdf -o rawtext/_preview_pages1\n"
 			"  python main.py local -- --start-page 8 -o .md/out.md\n"
 			"  python main.py ollama -- --model glm-ocr\n"
+			"  python main.py mistral -- rawtext/ComputerNetwork_Quiz_Bank.pdf --start-page 1\n"
 		),
 	)
 	sub = parser.add_subparsers(dest="action")
