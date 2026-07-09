@@ -1,0 +1,2191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OS Quiz — Ôn tập trắc nghiệm</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #181b24;
+      --surface-2: #1e2230;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8eaef;
+      --text-muted: #8b92a5;
+      --accent: #6366f1;
+      --accent-light: #818cf8;
+      --accent-glow: rgba(99,102,241,0.25);
+      --success: #22c55e;
+      --success-bg: rgba(34,197,94,0.12);
+      --error: #ef4444;
+      --error-bg: rgba(239,68,68,0.12);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245,158,11,0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.35);
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 10% -10%, rgba(99,102,241,0.18), transparent),
+        radial-gradient(ellipse 60% 50% at 90% 100%, rgba(139,92,246,0.12), transparent);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app { position: relative; z-index: 1; display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 24px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .logo h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+    .logo-sub { font-size: 0.78rem; color: var(--text-muted); padding-left: 46px; }
+
+    .sidebar.dragover {
+      box-shadow: inset 0 0 0 2px var(--accent);
+      background: rgba(99,102,241,0.04);
+    }
+
+    .file-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .file-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 4px 10px;
+      flex-shrink: 0;
+    }
+
+    .file-list-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .import-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border: 1px solid rgba(99,102,241,0.35);
+      border-radius: var(--radius-sm);
+      background: rgba(99,102,241,0.12);
+      color: var(--accent-light);
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .import-btn:hover {
+      background: rgba(99,102,241,0.2);
+      border-color: var(--accent);
+    }
+
+    .import-btn svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.85;
+    }
+
+    .sidebar-footer {
+      flex-shrink: 0;
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .clear-storage-btn {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: var(--radius-sm);
+      background: rgba(239,68,68,0.08);
+      color: var(--error);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .clear-storage-btn:hover {
+      background: rgba(239,68,68,0.16);
+      border-color: var(--error);
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+      border: 1px solid transparent;
+      margin-bottom: 4px;
+    }
+
+    .file-item:hover { background: var(--surface-2); }
+    .file-item.active {
+      background: rgba(99,102,241,0.12);
+      border-color: rgba(99,102,241,0.3);
+    }
+
+    .file-item-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .file-item.active .file-item-icon { background: rgba(99,102,241,0.2); }
+
+    .file-item-info { flex: 1; min-width: 0; }
+    .file-item-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-item-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .mini-progress {
+      flex: 1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .mini-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-light));
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .file-item-delete {
+      opacity: 0;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      transition: var(--transition);
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .file-item:hover .file-item-delete { opacity: 1; }
+    .file-item-delete:hover { color: var(--error); background: var(--error-bg); }
+
+    /* Main */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .main-header {
+      padding: 20px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: rgba(24,27,36,0.6);
+      backdrop-filter: blur(12px);
+    }
+
+    .main-header h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .header-stats {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .stat-value.correct { color: var(--success); }
+    .stat-value.wrong { color: var(--error); }
+    .stat-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .main-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+
+    /* Welcome */
+    .welcome {
+      max-width: 520px;
+      margin: 60px auto;
+      text-align: center;
+    }
+
+    .welcome-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15));
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+    }
+
+    .welcome h2 { font-size: 1.6rem; margin-bottom: 12px; letter-spacing: -0.03em; }
+    .welcome p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 28px; }
+
+    .format-hint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      text-align: left;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* Quiz layout */
+    .quiz-layout {
+      display: grid;
+      grid-template-columns: 1fr 175px;
+      gap: 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 900px) {
+      .app { flex-direction: column; }
+      .sidebar { width: 100%; max-height: 280px; }
+      .quiz-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      .question-card { padding: 18px 16px; }
+      .question-text { font-size: 0.98rem; }
+      .feedback { padding: 12px 14px; font-size: 0.85rem; }
+      .explanation-box { padding: 12px 14px; }
+      .explanation-content .md-content { font-size: 0.88rem; }
+    }
+
+    /* Question card */
+    .question-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .question-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(99,102,241,0.15);
+      color: var(--accent-light);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+
+    .question-badge.multi { background: var(--warning-bg); color: var(--warning); }
+
+    .question-text {
+      font-size: 1.05rem;
+      margin-bottom: 24px;
+      line-height: 1.7;
+    }
+
+    .question-text code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--surface-2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+
+    .question-text pre {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    .question-text pre code { background: none; padding: 0; }
+
+    .question-images {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0 20px;
+    }
+
+    .question-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: zoom-in;
+      transition: var(--transition);
+    }
+
+    .question-image:hover { border-color: rgba(99,102,241,0.4); }
+
+    .question-text img {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: #fff;
+      margin: 12px 0;
+      display: block;
+    }
+
+    .options { display: flex; flex-direction: column; gap: 10px; }
+
+    .option {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+      background: var(--surface-2);
+    }
+
+    .option:hover:not(.disabled) {
+      border-color: rgba(99,102,241,0.4);
+      background: rgba(99,102,241,0.05);
+    }
+
+    .option.selected {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.1);
+    }
+
+    .option.correct {
+      border-color: var(--success);
+      background: var(--success-bg);
+    }
+
+    .option.wrong {
+      border-color: var(--error);
+      background: var(--error-bg);
+    }
+
+    .option.missed {
+      border-color: var(--success);
+      background: var(--success-bg);
+      opacity: 0.7;
+    }
+
+    .option.disabled { cursor: default; }
+
+    .option-marker {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.28);
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+      transition: var(--transition);
+      box-sizing: border-box;
+    }
+
+    .options.multi .option-marker {
+      border-radius: 5px;
+    }
+
+    .option-marker-inner {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      transform: scale(0);
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .options.multi .option-marker-inner {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+
+    .option:hover:not(.disabled) .option-marker {
+      border-color: rgba(99,102,241,0.55);
+    }
+
+    .option.selected .option-marker {
+      border-color: var(--accent);
+    }
+
+    .option.selected .option-marker-inner {
+      transform: scale(1);
+      background: var(--accent);
+    }
+
+    .option.correct .option-marker,
+    .option.missed .option-marker {
+      border-color: var(--success);
+    }
+
+    .option.correct .option-marker-inner,
+    .option.missed .option-marker-inner {
+      transform: scale(1);
+      background: var(--success);
+    }
+
+    .option.wrong .option-marker {
+      border-color: var(--error);
+    }
+
+    .option.wrong .option-marker-inner {
+      transform: scale(1);
+      background: var(--error);
+    }
+
+    .option-letter {
+      font-weight: 700;
+      margin-right: 6px;
+      color: var(--text-muted);
+    }
+
+    .option.selected .option-letter { color: var(--accent-light); }
+    .option.correct .option-letter,
+    .option.missed .option-letter { color: var(--success); }
+    .option.wrong .option-letter { color: var(--error); }
+
+    .option-text {
+      flex: 1;
+      font-size: 0.95rem;
+      padding-top: 3px;
+      min-width: 0;
+    }
+
+    /* Markdown content (question body + options) */
+    .md-content { line-height: 1.6; }
+    .md-content > :first-child { margin-top: 0; }
+    .md-content > :last-child { margin-bottom: 0; }
+
+    .md-content p { margin: 0.5em 0; }
+    .md-content strong { color: var(--text); font-weight: 600; }
+    .md-content em { font-style: italic; color: var(--text); }
+    .md-content u { text-decoration: underline; text-underline-offset: 2px; }
+
+    /* Database schema: PK = bold + underline, FK = italic */
+    .md-content .schema-pk {
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .md-content .schema-fk {
+      font-style: italic;
+      color: var(--text);
+    }
+
+    .md-content .schema-pkfk {
+      font-weight: 700;
+      font-style: italic;
+      color: var(--text);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .md-content code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--surface-2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+
+    .md-content pre {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    .md-content pre code { background: none; padding: 0; }
+
+    .md-content table {
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.86em;
+      margin: 6px 0 14px;
+      width: auto;
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .md-content th,
+    .md-content td {
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .md-content th {
+      background: rgba(99,102,241,0.18);
+      color: var(--accent-light);
+      font-weight: 600;
+      font-size: 0.92em;
+    }
+
+    .md-content td {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .md-content tbody tr:hover td {
+      background: rgba(99,102,241,0.08);
+    }
+
+    /* Relation labels (r, t, …) above tables in question stem */
+    .question-text .md-content p:has(+ table) {
+      margin-bottom: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent-light);
+    }
+
+    .question-text .md-content p:has(+ table) + table {
+      margin-top: 0;
+    }
+
+    .question-text .md-content .relation-pair {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px 28px;
+      align-items: flex-start;
+      margin: 12px 0 18px;
+    }
+
+    .question-text .md-content .relation-block {
+      flex: 0 0 auto;
+    }
+
+    .question-text .md-content .relation-block > p {
+      margin-bottom: 4px;
+    }
+
+    .question-text .md-content .relation-block > table {
+      margin-bottom: 0;
+    }
+
+    .option-text .md-content table {
+      font-size: 0.8em;
+      margin: 2px 0 0;
+    }
+
+    .option-text .md-content th,
+    .option-text .md-content td {
+      padding: 4px 10px;
+    }
+
+    .feedback-block {
+      margin-top: 20px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .feedback-block.show { display: flex; }
+
+    .feedback {
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .feedback.correct { background: var(--success-bg); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+    .feedback.wrong { background: var(--error-bg); color: var(--error); border: 1px solid rgba(239,68,68,0.3); }
+
+    .explanation-box {
+      width: 100%;
+      padding: 16px 18px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .feedback-block.correct .explanation-box {
+      border-color: rgba(34,197,94,0.22);
+      background: rgba(34,197,94,0.05);
+    }
+
+    .feedback-block.wrong .explanation-box {
+      border-color: rgba(239,68,68,0.18);
+      background: rgba(239,68,68,0.04);
+    }
+
+    .explanation-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent-light);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .explanation-content {
+      color: var(--text);
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .explanation-content .md-content {
+      font-size: 0.92rem;
+      line-height: 1.75;
+    }
+
+    .explanation-content .md-content pre {
+      max-width: 100%;
+      overflow-x: auto;
+      font-size: 0.82rem;
+    }
+
+    .explanation-content .md-content table {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      font-size: 0.85rem;
+    }
+
+    .explanation-content .md-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius-sm);
+    }
+
+    .ans-note {
+      font-size: 0.78rem;
+      color: var(--warning);
+      margin-top: 8px;
+      font-style: italic;
+    }
+
+    .question-badge.essay { background: rgba(34,197,94,0.14); color: var(--success); }
+
+    .essay-input-wrap { display: flex; flex-direction: column; gap: 8px; }
+
+    .essay-input {
+      width: 100%;
+      min-height: 120px;
+      padding: 14px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      resize: vertical;
+      transition: var(--transition);
+    }
+
+    .essay-input:focus {
+      outline: none;
+      border-color: rgba(99,102,241,0.55);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
+
+    .essay-input:disabled {
+      opacity: 0.85;
+      cursor: default;
+    }
+
+    .essay-input.correct {
+      border-color: var(--success);
+      background: var(--success-bg);
+    }
+
+    .essay-input.wrong {
+      border-color: var(--error);
+      background: var(--error-bg);
+    }
+
+    .essay-hint {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .essay-expected {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(99,102,241,0.08);
+      border: 1px solid rgba(99,102,241,0.2);
+      font-size: 0.88rem;
+    }
+
+    .essay-expected-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent-light);
+      margin-bottom: 6px;
+    }
+
+    .essay-expected-value {
+      font-family: 'JetBrains Mono', monospace;
+      word-break: break-word;
+    }
+
+    /* Nav panel */
+    .nav-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      position: sticky;
+      top: 0;
+    }
+
+    .nav-panel h3 {
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .progress-bar-wrap { margin-bottom: 6px; }
+    .progress-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.58rem;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #8b5cf6);
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .question-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 10px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .q-dot {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 5px;
+      background: var(--surface-2);
+      color: #f1f5f9;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+      flex-shrink: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .q-dot:hover { background: rgba(99,102,241,0.28); color: #fff; }
+    .q-dot.current { background: var(--accent); color: #fff; box-shadow: 0 0 5px var(--accent-glow); }
+    .q-dot.answered { background: rgba(99,102,241,0.32); color: #c7d2fe; }
+    .q-dot.checked-correct { background: var(--success-bg); color: #4ade80; }
+    .q-dot.checked-wrong { background: var(--error-bg); color: #fca5a5; }
+
+    .nav-actions { display: flex; flex-direction: column; gap: 8px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--accent-glow); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: rgba(255,255,255,0.06); }
+
+    .btn-danger {
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+
+    .btn-danger:hover { background: rgba(239,68,68,0.2); }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .btn-row .btn { flex: 1; }
+
+    /* Results overlay */
+    .results-card {
+      max-width: 480px;
+      margin: 40px auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .results-score {
+      font-size: 3.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-light), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.1;
+      margin: 16px 0 8px;
+    }
+
+    .results-detail { color: var(--text-muted); margin-bottom: 28px; }
+
+    .results-actions { display: flex; flex-direction: column; gap: 10px; }
+
+    .hidden { display: none !important; }
+
+    input[type="file"] { display: none; }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 200;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      animation: slideUp 0.25s ease;
+    }
+
+    .modal-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(239, 68, 68, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 14px;
+    }
+
+    .modal h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .modal p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 22px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .modal-actions .btn {
+      min-width: 88px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 20px;
+      font-size: 0.88rem;
+      box-shadow: var(--shadow);
+      z-index: 100;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">🧠</div>
+          <h1>OS Quiz</h1>
+        </div>
+        <p class="logo-sub">Ôn tập trắc nghiệm Machine Learning</p>
+      </div>
+
+      <div class="file-list">
+        <div class="file-list-header">
+          <div class="file-list-title">Đề đã import</div>
+          <button type="button" class="import-btn" id="importBtn" title="Import file .md hoặc kéo thả vào sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+            </svg>
+            Import .md
+          </button>
+          <input type="file" id="fileInput" accept=".md,.txt" multiple>
+        </div>
+        <div id="fileList"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button type="button" class="clear-storage-btn" id="clearStorageBtn" title="Xóa toàn bộ dữ liệu đã lưu trong trình duyệt">
+          🗑 Xóa tiến độ
+        </button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="main-header hidden" id="mainHeader">
+        <h2 id="currentFileName">—</h2>
+        <div class="header-stats">
+          <div class="stat">
+            <div class="stat-value" id="statTotal">0</div>
+            <div class="stat-label">Tổng câu</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value correct" id="statCorrect">0</div>
+            <div class="stat-label">Đúng</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value wrong" id="statWrong">0</div>
+            <div class="stat-label">Sai</div>
+          </div>
+        </div>
+      </header>
+
+      <div class="main-body" id="mainBody">
+        <div class="welcome" id="welcomeScreen">
+          <div class="welcome-icon">📚</div>
+          <h2>Bắt đầu ôn tập</h2>
+          <p>Import file .md chứa câu hỏi trắc nghiệm hoặc tự luận. Tiến trình làm bài được lưu tự động cho từng file riêng biệt.</p>
+          <div class="format-hint">
+Câu 1: Nội dung câu hỏi
+img: assets/hinh-minh-hoa.png
+A. Đáp án A
+B. Đáp án B
+C. Đáp án C
+D. Đáp án D
+ans: B
+
+Câu 2: (Tự luận) Viết đáp án
+ans: nội dung đáp án | đáp án khác
+
+Câu 3: (Chọn nhiều đáp án)
+A. Đáp án A
+B. Đáp án B
+C. Đáp án C
+ans: A,C
+          </div>
+          <p style="margin-top:16px;font-size:0.82rem;color:var(--text-muted);">
+            Tự luận: không cần A/B/C/D, chỉ cần dòng <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">ans:</code>.
+            Chấm linh hoạt (bỏ hoa/thường, khoảng trắng, dấu). Nhiều đáp án đúng (tự luận): dùng <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">|</code>.
+            Chọn nhiều đáp án (trắc nghiệm): <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">ans: A,C</code>.
+          </p>
+          <p style="margin-top:8px;font-size:0.82rem;color:var(--text-muted);">
+            Ảnh: đặt file vào thư mục <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">assets/</code> cạnh file .md,
+            thêm dòng <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">img: assets/ten-anh.png</code>
+            hoặc <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">![mô tả](assets/ten-anh.png)</code>
+          </p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay hidden" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal">
+      <div class="modal-icon">⚠️</div>
+      <h3 id="confirmModalTitle">Bạn có chắc không?</h3>
+      <p id="confirmModalMessage"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="confirmModalCancel">Hủy</button>
+        <button type="button" class="btn btn-danger" id="confirmModalOk">Xóa tiến độ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_PREFIX = 'ml-quiz-v1';
+    const FILES_KEY = `${STORAGE_PREFIX}-files`;
+
+    let files = {};
+    let activeFileId = null;
+
+    const $ = (sel) => document.querySelector(sel);
+
+    function fileId(name) {
+      return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    }
+
+    function loadFilesMeta() {
+      try {
+        return JSON.parse(localStorage.getItem(FILES_KEY)) || {};
+      } catch { return {}; }
+    }
+
+    function saveFilesMeta() {
+      const meta = {};
+      for (const [id, f] of Object.entries(files)) {
+        meta[id] = {
+          name: f.name,
+          questionCount: f.questions.length,
+          importedAt: f.importedAt,
+          basePath: f.basePath || '',
+          path: f.path || ''
+        };
+      }
+      localStorage.setItem(FILES_KEY, JSON.stringify(meta));
+    }
+
+    function progressKey(id) { return `${STORAGE_PREFIX}-progress-${id}`; }
+    function contentKey(id) { return `${STORAGE_PREFIX}-content-${id}`; }
+
+    function loadProgress(id) {
+      try {
+        return JSON.parse(localStorage.getItem(progressKey(id))) || defaultProgress();
+      } catch { return defaultProgress(); }
+    }
+
+    function saveProgress(id) {
+      if (!files[id]) return;
+      localStorage.setItem(progressKey(id), JSON.stringify(files[id].progress));
+    }
+
+    function defaultProgress() {
+      return { currentIndex: 0, answers: {}, checked: {}, showResults: false };
+    }
+
+    function resolveAssetPath(basePath, imgPath) {
+      const src = imgPath.trim();
+      if (/^(https?:|data:|\/)/i.test(src)) return src;
+
+      if (basePath && window.BUNDLE?.assets) {
+        const fullPath = basePath.replace(/\/?$/, '/') + src.replace(/^\.\//, '');
+        if (BUNDLE.assets[fullPath]) return BUNDLE.assets[fullPath];
+      }
+
+      if (basePath) return basePath + src.replace(/^\.\//, '');
+      return src;
+    }
+
+    function parseMarkdown(content) {
+      // Bỏ marker trang (----- Page 1 -----) và fence ```md bọc nội dung
+      content = content
+        .replace(/^[-–—]{3,}\s*[Pp]age\s*\d+\s*[-–—]{3,}\s*$/gm, '')
+        .replace(/^```(?:md|markdown)?\s*$/gm, '');
+
+      const questions = [];
+      const blocks = content.split(/\n(?=Câu\s+\d+\s*:)/i).filter(b => b.trim());
+
+      for (const block of blocks) {
+        const lines = block.trim().split('\n');
+        const headerMatch = lines[0].match(/^Câu\s+(\d+)\s*:\s*(.*)$/i);
+        if (!headerMatch) continue;
+
+        const number = parseInt(headerMatch[1], 10);
+        let questionText = headerMatch[2].trim();
+        const images = [];
+        const options = {};
+        let correctAnswerRaw = '';
+        let ansNote = '';
+        let explanation = '';
+        let ansFound = false;
+        let currentOption = null;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+
+          // Bỏ qua marker trang / fence markdown còn sót
+          if (/^[-–—]{3,}\s*[Pp]age\s*\d+\s*[-–—]{3,}$/.test(line) ||
+              /^```(?:md|markdown)?$/.test(line)) {
+            continue;
+          }
+
+          if (ansFound) {
+            if (line) {
+              explanation += (explanation ? '\n' : '') + line;
+            } else if (explanation) {
+              explanation += '\n';
+            }
+            continue;
+          }
+
+          if (!line) {
+            if (currentOption) {
+              options[currentOption] += '\n';
+            } else if (Object.keys(options).length === 0) {
+              questionText += '\n';
+            }
+            continue;
+          }
+
+          const ansMatch = line.match(/^ans\s*:\s*(.+)$/i);
+          if (ansMatch) {
+            currentOption = null;
+            ansFound = true;
+            let ansPart = ansMatch[1].trim();
+            const noteMatch = ansPart.match(/\[(suy luận|không chắc)\]/i);
+            if (noteMatch) ansNote = noteMatch[1];
+            correctAnswerRaw = ansPart.replace(/\s*\[.*?\]\s*/g, '').trim();
+            continue;
+          }
+
+          const imgMatch = line.match(/^img\s*:\s*(.+)$/i);
+          if (imgMatch) {
+            currentOption = null;
+            images.push(imgMatch[1].trim());
+            continue;
+          }
+
+          const optMatch = line.match(/^([A-Z])\.\s*(.*)$/);
+          if (optMatch) {
+            currentOption = optMatch[1];
+            options[currentOption] = optMatch[2].trim();
+            continue;
+          }
+
+          if (currentOption) {
+            options[currentOption] += (options[currentOption] ? '\n' : '') + line;
+          } else if (Object.keys(options).length === 0) {
+            questionText += (questionText ? '\n' : '') + line;
+          }
+        }
+
+        const optionKeys = Object.keys(options);
+        if (optionKeys.length === 0) {
+          if (!correctAnswerRaw) continue;
+          questions.push({
+            number,
+            questionText,
+            images,
+            options: {},
+            correctAnswer: correctAnswerRaw,
+            ansNote,
+            explanation: explanation.trim(),
+            isEssay: true,
+            isMulti: false
+          });
+          continue;
+        }
+
+        const correctAnswer = correctAnswerRaw
+          .replace(/\s/g, '')
+          .toUpperCase()
+          .split(',')
+          .sort()
+          .join(',');
+
+        questions.push({
+          number,
+          questionText,
+          images,
+          options,
+          correctAnswer,
+          ansNote,
+          explanation: explanation.trim(),
+          isEssay: false,
+          isMulti: correctAnswer.includes(',')
+        });
+      }
+
+      return questions.sort((a, b) => a.number - b.number);
+    }
+
+    function preprocessSchemaNotation(text) {
+      return text
+        .replace(/\{pkfk\}(.+?)\{\/pkfk\}/gi, '<span class="schema-pkfk">$1</span>')
+        .replace(/\{pk\}(.+?)\{\/pk\}/gi, '<span class="schema-pk">$1</span>')
+        .replace(/\{fk\}(.+?)\{\/fk\}/gi, '<span class="schema-fk">$1</span>');
+    }
+
+    function renderMarkdown(text, basePath = '') {
+      let processed = preprocessSchemaNotation(text);
+      if (basePath) {
+        processed = processed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) =>
+          `![${alt}](${resolveAssetPath(basePath, src)})`
+        );
+      }
+      if (typeof marked !== 'undefined') {
+        const html = marked.parse(processed, { breaks: true, gfm: true });
+        return `<div class="md-content">${html}</div>`;
+      }
+      return `<div class="md-content">${processed.replace(/\n/g, '<br>')}</div>`;
+    }
+
+    function renderQuestionImages(images, basePath) {
+      if (!images?.length) return '';
+      return `
+        <div class="question-images">
+          ${images.map(src => {
+            const url = resolveAssetPath(basePath, src);
+            return `<img class="question-image" src="${url}" alt="Hình minh họa" loading="lazy" onclick="window.open(this.src,'_blank')">`;
+          }).join('')}
+        </div>`;
+    }
+
+    function toast(msg) {
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2800);
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderExplanationHtml(q, basePath) {
+      if (!q.explanation) return '';
+      return `
+        <div class="explanation-box">
+          <div class="explanation-label">Lời giải</div>
+          <div class="explanation-content">${renderMarkdown(q.explanation, basePath)}</div>
+        </div>`;
+    }
+
+    function renderFeedbackHtml(q, correct, basePath) {
+      const statusClass = correct ? 'correct' : 'wrong';
+      const statusText = q.isEssay
+        ? (correct ? '✓ Chính xác!' : '✗ Chưa khớp đáp án mẫu')
+        : (correct ? '✓ Chính xác!' : `✗ Sai rồi — đáp án đúng: ${q.correctAnswer.replace(/,/g, ', ')}`);
+
+      return `
+        <div class="feedback-block show ${statusClass}">
+          <div class="feedback ${statusClass}">${statusText}</div>
+          ${!correct && q.isEssay ? `
+            <div class="essay-expected">
+              <div class="essay-expected-label">Đáp án tham khảo</div>
+              <div class="essay-expected-value">${escapeHtml(q.correctAnswer)}</div>
+            </div>
+          ` : ''}
+          ${renderExplanationHtml(q, basePath)}
+          ${q.ansNote ? `<div class="ans-note">⚠ Đáp án được đánh dấu [${q.ansNote}]</div>` : ''}
+        </div>`;
+    }
+
+    let confirmModalCallback = null;
+
+    function showConfirmModal({ title, message, confirmLabel, onConfirm }) {
+      const modal = $('#confirmModal');
+      $('#confirmModalTitle').textContent = title;
+      $('#confirmModalMessage').textContent = message;
+      $('#confirmModalOk').textContent = confirmLabel;
+      confirmModalCallback = onConfirm;
+      modal.classList.remove('hidden');
+    }
+
+    function hideConfirmModal() {
+      $('#confirmModal').classList.add('hidden');
+      confirmModalCallback = null;
+    }
+
+    function setupConfirmModal() {
+      const modal = $('#confirmModal');
+
+      $('#confirmModalCancel').addEventListener('click', hideConfirmModal);
+
+      $('#confirmModalOk').addEventListener('click', () => {
+        const cb = confirmModalCallback;
+        hideConfirmModal();
+        cb?.();
+      });
+
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) hideConfirmModal();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) hideConfirmModal();
+      });
+    }
+
+    function clearAllProgress() {
+      for (const id of Object.keys(files)) {
+        files[id].progress = defaultProgress();
+        localStorage.removeItem(progressKey(id));
+      }
+
+      const prefix = `${STORAGE_PREFIX}-progress-`;
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(prefix)) keysToRemove.push(key);
+      }
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+      renderFileList();
+      if (activeFileId && files[activeFileId]) {
+        renderQuiz();
+      } else {
+        showWelcome();
+      }
+      toast('Đã xóa toàn bộ tiến độ');
+    }
+
+    function openClearProgressModal() {
+      showConfirmModal({
+        title: 'Xóa toàn bộ tiến độ?',
+        message: 'Tất cả câu trả lời và kết quả đã làm sẽ bị xóa. Danh sách đề thi vẫn giữ nguyên.',
+        confirmLabel: 'Xóa tiến độ',
+        onConfirm: clearAllProgress
+      });
+    }
+
+    async function importFile(file, basePath = '') {
+      const text = await file.text();
+      const questions = parseMarkdown(text);
+
+      if (questions.length === 0) {
+        toast(`⚠️ Không tìm thấy câu hỏi trong "${file.name}"`);
+        return;
+      }
+
+      const id = fileId(file.name);
+      const existing = loadProgress(id);
+
+      files[id] = {
+        name: file.name,
+        basePath,
+        path: '',
+        questions,
+        importedAt: Date.now(),
+        progress: existing
+      };
+
+      localStorage.setItem(contentKey(id), text);
+      saveFilesMeta();
+      saveProgress(id);
+
+      activeFileId = id;
+      renderFileList();
+      renderQuiz();
+      toast(`✓ Đã import ${questions.length} câu từ "${file.name}"`);
+    }
+
+    async function loadQuizFromPath(path) {
+      const res = await fetch(path);
+      if (!res.ok) return false;
+
+      const text = await res.text();
+      const questions = parseMarkdown(text);
+      if (questions.length === 0) return false;
+
+      const name = path.split('/').pop();
+      const basePath = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+      const id = fileId(name);
+      const existing = loadProgress(id);
+
+      files[id] = {
+        name,
+        path,
+        basePath,
+        questions,
+        importedAt: files[id]?.importedAt || Date.now(),
+        progress: existing
+      };
+
+      localStorage.setItem(contentKey(id), text);
+      return true;
+    }
+
+    function loadQuizFromBundle(path) {
+      const text = window.BUNDLE?.md?.[path];
+      if (!text) return false;
+
+      const questions = parseMarkdown(text);
+      if (questions.length === 0) return false;
+
+      const name = path.split('/').pop();
+      const basePath = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+      const id = fileId(name);
+      const existing = loadProgress(id);
+
+      files[id] = {
+        name,
+        path,
+        basePath,
+        questions,
+        importedAt: files[id]?.importedAt || Date.now(),
+        progress: existing
+      };
+
+      localStorage.setItem(contentKey(id), text);
+      return true;
+    }
+
+    function loadBundledQuizzes() {
+      const entries = BUNDLE.quizzes || Object.keys(BUNDLE.md || {});
+      for (const entry of entries) {
+        const path = typeof entry === 'string' ? entry : entry.path;
+        if (path) loadQuizFromBundle(path);
+      }
+      saveFilesMeta();
+    }
+
+    async function loadManifestQuizzes() {
+      try {
+        const res = await fetch('manifest.json');
+        if (!res.ok) return;
+
+        const { quizzes } = await res.json();
+        if (!Array.isArray(quizzes)) return;
+
+        for (const entry of quizzes) {
+          const path = typeof entry === 'string' ? entry : entry.path;
+          if (path) await loadQuizFromPath(path);
+        }
+
+        saveFilesMeta();
+      } catch {
+        /* manifest.json tùy chọn — cần chạy qua HTTP server */
+      }
+    }
+
+    function deleteFile(id, e) {
+      e.stopPropagation();
+      if (!confirm(`Xóa "${files[id].name}" và tiến trình làm bài?`)) return;
+
+      delete files[id];
+      localStorage.removeItem(progressKey(id));
+      localStorage.removeItem(contentKey(id));
+
+      if (activeFileId === id) {
+        activeFileId = Object.keys(files)[0] || null;
+      }
+
+      saveFilesMeta();
+      renderFileList();
+
+      if (activeFileId) renderQuiz();
+      else showWelcome();
+    }
+
+    function normalizeEssayAnswer(text) {
+      if (text == null) return '';
+      let s = String(text).trim().toLowerCase();
+      s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      s = s
+        .replace(/∪/g, ' u ')
+        .replace(/∩/g, ' n ')
+        .replace(/×/g, ' x ')
+        .replace(/÷/g, ' / ')
+        .replace(/[−–—]/g, '-')
+        .replace(/\\+/g, ' \\ ')
+        .replace(/\bunion\b/g, ' u ')
+        .replace(/\bintersect\b/g, ' n ')
+        .replace(/\bminus\b/g, ' \\ ')
+        .replace(/[,;.:]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return s;
+    }
+
+    function compactEssayAnswer(text) {
+      return normalizeEssayAnswer(text).replace(/\s/g, '');
+    }
+
+    function essayAnswerVariants(text) {
+      const compact = compactEssayAnswer(text);
+      const minusAsDiff = compact.replace(/-/g, '\\');
+      const diffAsMinus = compact.replace(/\\/g, '-');
+      return [...new Set([compact, minusAsDiff, diffAsMinus])];
+    }
+
+    function parseEssayAlternatives(correctAnswer) {
+      return correctAnswer
+        .split(/\s*(?:\|\||\|)\s*/)
+        .map((a) => a.trim())
+        .filter(Boolean);
+    }
+
+    function isEssayAnswerCorrect(q, userInput) {
+      const userVariants = essayAnswerVariants(userInput);
+      if (!userVariants[0]) return false;
+
+      const alternatives = parseEssayAlternatives(q.correctAnswer);
+      return alternatives.some((alt) => {
+        const altVariants = essayAnswerVariants(alt);
+        if (altVariants.some((av) => userVariants.some((uv) => uv === av))) return true;
+
+        const altNorm = normalizeEssayAnswer(alt);
+        const userNorm = normalizeEssayAnswer(userInput);
+        if (userNorm === altNorm) return true;
+
+        const keywords = altNorm.split(/\s+/).filter((w) => w.length > 2);
+        if (keywords.length >= 3 && keywords.every((kw) => userNorm.includes(kw))) return true;
+        return false;
+      });
+    }
+
+    function hasUserAnswer(q, selected) {
+      if (q.isEssay) return Boolean(String(selected[0] || '').trim());
+      return Boolean(selected?.length);
+    }
+
+    function getStats(id) {
+      const f = files[id];
+      if (!f) return { total: 0, answered: 0, correct: 0, wrong: 0 };
+
+      const { questions, progress } = f;
+      let correct = 0, wrong = 0, answered = 0;
+
+      for (const q of questions) {
+        const key = String(q.number);
+        const selected = progress.answers[key] || [];
+        if (hasUserAnswer(q, selected)) answered++;
+        if (progress.checked[key]) {
+          if (isAnswerCorrect(q, selected)) correct++;
+          else wrong++;
+        }
+      }
+
+      return { total: questions.length, answered, correct, wrong };
+    }
+
+    function isAnswerCorrect(q, selected) {
+      if (q.isEssay) return isEssayAnswerCorrect(q, selected[0] || '');
+      const correct = q.correctAnswer.split(',').filter(Boolean);
+      const sel = [...selected].sort();
+      if (sel.length !== correct.length) return false;
+      return sel.every((s, i) => s === correct[i]);
+    }
+
+    function renderFileList() {
+      const list = $('#fileList');
+      const ids = Object.keys(files);
+
+      if (ids.length === 0) {
+        list.innerHTML = '<p style="padding:8px;color:var(--text-muted);font-size:0.82rem;">Chưa có file nào</p>';
+        return;
+      }
+
+      list.innerHTML = ids.map(id => {
+        const f = files[id];
+        const stats = getStats(id);
+        const pct = stats.total ? Math.round((stats.answered / stats.total) * 100) : 0;
+        const active = id === activeFileId ? 'active' : '';
+
+        return `
+          <div class="file-item ${active}" data-id="${id}">
+            <div class="file-item-icon">📄</div>
+            <div class="file-item-info">
+              <div class="file-item-name" title="${f.name}">${f.name}</div>
+              <div class="file-item-meta">
+                <span>${stats.answered}/${stats.total}</span>
+                <div class="mini-progress"><div class="mini-progress-fill" style="width:${pct}%"></div></div>
+              </div>
+            </div>
+            <button class="file-item-delete" data-delete="${id}" title="Xóa">×</button>
+          </div>`;
+      }).join('');
+
+      list.querySelectorAll('.file-item').forEach(el => {
+        el.addEventListener('click', () => {
+          activeFileId = el.dataset.id;
+          renderFileList();
+          renderQuiz();
+        });
+      });
+
+      list.querySelectorAll('[data-delete]').forEach(btn => {
+        btn.addEventListener('click', (e) => deleteFile(btn.dataset.delete, e));
+      });
+    }
+
+    function showWelcome() {
+      $('#welcomeScreen')?.classList.remove('hidden');
+      $('#mainHeader').classList.add('hidden');
+      $('#mainBody').innerHTML = `
+        <div class="welcome" id="welcomeScreen">
+          <div class="welcome-icon">📚</div>
+          <h2>Bắt đầu ôn tập</h2>
+          <p>Import file .md chứa câu hỏi trắc nghiệm hoặc tự luận. Tiến trình làm bài được lưu tự động cho từng file riêng biệt.</p>
+          <div class="format-hint">
+Câu 1: Nội dung câu hỏi
+img: assets/hinh-minh-hoa.png
+A. Đáp án A
+B. Đáp án B
+C. Đáp án C
+D. Đáp án D
+ans: B
+
+Câu 2: (Tự luận) Viết đáp án
+ans: nội dung đáp án | đáp án khác
+
+Câu 3: (Chọn nhiều đáp án)
+A. Đáp án A
+B. Đáp án B
+C. Đáp án C
+ans: A,C
+          </div>
+          <p style="margin-top:16px;font-size:0.82rem;color:var(--text-muted);">
+            Tự luận: không cần A/B/C/D, chỉ cần dòng <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">ans:</code>.
+            Chấm linh hoạt (bỏ hoa/thường, khoảng trắng, dấu). Nhiều đáp án đúng (tự luận): dùng <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">|</code>.
+            Chọn nhiều đáp án (trắc nghiệm): <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">ans: A,C</code>.
+          </p>
+          <p style="margin-top:8px;font-size:0.82rem;color:var(--text-muted);">
+            Ảnh: đặt file vào thư mục <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">assets/</code> cạnh file .md,
+            thêm dòng <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">img: assets/ten-anh.png</code>
+            hoặc <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px;">![mô tả](assets/ten-anh.png)</code>
+          </p>
+        </div>`;
+    }
+
+    function renderQuiz() {
+      const f = files[activeFileId];
+      if (!f) { showWelcome(); return; }
+
+      $('#mainHeader').classList.remove('hidden');
+      $('#currentFileName').textContent = f.name;
+
+      const stats = getStats(activeFileId);
+      $('#statTotal').textContent = stats.total;
+      $('#statCorrect').textContent = stats.correct;
+      $('#statWrong').textContent = stats.wrong;
+
+      if (f.progress.showResults) {
+        renderResults();
+        return;
+      }
+
+      const idx = f.progress.currentIndex;
+      const q = f.questions[idx];
+      if (!q) { f.progress.currentIndex = 0; renderQuiz(); return; }
+
+      const key = String(q.number);
+      const selected = f.progress.answers[key] || [];
+      const checked = f.progress.checked[key] || false;
+      const correct = isAnswerCorrect(q, selected);
+      const hasAnswer = hasUserAnswer(q, selected);
+      const essayAnswer = selected[0] || '';
+
+      const optionKeys = Object.keys(q.options).sort();
+
+      const badgeHtml = q.isEssay
+        ? '<div class="question-badge essay">✎ Tự luận</div>'
+        : `<div class="question-badge ${q.isMulti ? 'multi' : ''}">${
+            q.isMulti ? '☑ Chọn nhiều đáp án' : '○ Chọn một đáp án'
+          }</div>`;
+
+      const answerHtml = q.isEssay
+        ? `
+            <div class="essay-input-wrap">
+              <textarea
+                class="essay-input${checked ? (correct ? ' correct' : ' wrong') : ''}"
+                id="essayInput"
+                ${checked ? 'disabled' : ''}
+                placeholder="Nhập đáp án của bạn..."
+              >${escapeHtml(essayAnswer)}</textarea>
+              <div class="essay-hint">Chấm linh hoạt: bỏ qua hoa/thường, khoảng trắng thừa, dấu tiếng Việt và ký hiệu tương đương (∪, \\, …).</div>
+            </div>`
+        : `
+            <div class="options ${q.isMulti ? 'multi' : 'single'}" id="options">
+              ${optionKeys.map(letter => {
+                const isSelected = selected.includes(letter);
+                let cls = 'option';
+                if (isSelected) cls += ' selected';
+                if (checked) {
+                  cls += ' disabled';
+                  const isCorrectOpt = q.correctAnswer.split(',').includes(letter);
+                  if (isCorrectOpt && isSelected) cls += ' correct';
+                  else if (isCorrectOpt && !isSelected) cls += ' missed';
+                  else if (!isCorrectOpt && isSelected) cls += ' wrong';
+                }
+                return `
+                  <div class="${cls}" data-letter="${letter}">
+                    <div class="option-marker" aria-hidden="true"><span class="option-marker-inner"></span></div>
+                    <div class="option-text"><span class="option-letter">${letter}.</span>${renderMarkdown(q.options[letter])}</div>
+                  </div>`;
+              }).join('')}
+            </div>`;
+
+      const feedbackHtml = checked ? renderFeedbackHtml(q, correct, f.basePath) : '';
+
+      $('#mainBody').innerHTML = `
+        <div class="quiz-layout">
+          <div class="question-card">
+            ${badgeHtml}
+            <div class="question-text">
+              <strong>Câu ${q.number}:</strong>
+              <div>${renderMarkdown(q.questionText, f.basePath)}</div>
+              ${renderQuestionImages(q.images, f.basePath)}
+            </div>
+            ${answerHtml}
+            ${feedbackHtml}
+            <div class="btn-row">
+              <button class="btn btn-secondary" id="btnPrev" ${idx === 0 ? 'disabled' : ''}>← Trước</button>
+              ${!checked
+                ? `<button class="btn btn-primary" id="btnCheck" ${!hasAnswer ? 'disabled' : ''}>Kiểm tra</button>`
+                : `<button class="btn btn-primary" id="btnNext">${idx === f.questions.length - 1 ? 'Xem kết quả' : 'Tiếp →'}</button>`
+              }
+            </div>
+          </div>
+
+          <div class="nav-panel">
+            <h3>Tiến trình</h3>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-label">
+                <span>Đã làm</span>
+                <span>${stats.answered}/${stats.total}</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-bar-fill" style="width:${stats.total ? (stats.answered / stats.total * 100) : 0}%"></div>
+              </div>
+            </div>
+            <div class="question-grid" id="questionGrid">
+              ${f.questions.map((qq, i) => {
+                const k = String(qq.number);
+                let cls = 'q-dot';
+                if (i === idx) cls += ' current';
+                else if (f.progress.checked[k]) {
+                  cls += isAnswerCorrect(qq, f.progress.answers[k] || []) ? ' checked-correct' : ' checked-wrong';
+                } else if (hasUserAnswer(qq, f.progress.answers[k] || [])) {
+                  cls += ' answered';
+                }
+                return `<button class="${cls}" data-index="${i}">${qq.number}</button>`;
+              }).join('')}
+            </div>
+            <div class="nav-actions">
+              <button class="btn btn-primary" id="btnCheckAll">Kiểm tra tất cả</button>
+              <button class="btn btn-secondary" id="btnRetryWrong">Làm lại câu sai</button>
+              <button class="btn btn-danger" id="btnReset">Reset tiến trình</button>
+            </div>
+          </div>
+        </div>`;
+
+      bindQuizEvents(f, q, idx);
+    }
+
+    function bindQuizEvents(f, q, idx) {
+      const key = String(q.number);
+
+      $('#essayInput')?.addEventListener('input', (e) => {
+        const value = e.target.value;
+        f.progress.answers[key] = [value];
+        f.progress.checked[key] = false;
+        saveProgress(activeFileId);
+        const btnCheck = $('#btnCheck');
+        if (btnCheck) btnCheck.disabled = !value.trim();
+      });
+
+      $('#options')?.querySelectorAll('.option:not(.disabled)').forEach(el => {
+        el.addEventListener('click', () => {
+          const letter = el.dataset.letter;
+          let sel = f.progress.answers[key] || [];
+
+          if (q.isMulti) {
+            sel = sel.includes(letter) ? sel.filter(l => l !== letter) : [...sel, letter].sort();
+          } else {
+            sel = [letter];
+          }
+
+          f.progress.answers[key] = sel;
+          f.progress.checked[key] = false;
+          saveProgress(activeFileId);
+          renderQuiz();
+        });
+      });
+
+      $('#btnCheck')?.addEventListener('click', () => {
+        f.progress.checked[key] = true;
+        saveProgress(activeFileId);
+        renderQuiz();
+        renderFileList();
+      });
+
+      $('#btnNext')?.addEventListener('click', () => {
+        if (idx === f.questions.length - 1) {
+          f.progress.showResults = true;
+          saveProgress(activeFileId);
+          renderQuiz();
+        } else {
+          f.progress.currentIndex = idx + 1;
+          saveProgress(activeFileId);
+          renderQuiz();
+        }
+      });
+
+      $('#btnPrev')?.addEventListener('click', () => {
+        f.progress.currentIndex = Math.max(0, idx - 1);
+        saveProgress(activeFileId);
+        renderQuiz();
+      });
+
+      $('#questionGrid')?.querySelectorAll('.q-dot').forEach(btn => {
+        btn.addEventListener('click', () => {
+          f.progress.currentIndex = parseInt(btn.dataset.index, 10);
+          saveProgress(activeFileId);
+          renderQuiz();
+        });
+      });
+
+      $('#btnCheckAll')?.addEventListener('click', () => {
+        for (const qq of f.questions) {
+          const k = String(qq.number);
+          if (hasUserAnswer(qq, f.progress.answers[k] || [])) f.progress.checked[k] = true;
+        }
+        f.progress.showResults = true;
+        saveProgress(activeFileId);
+        renderQuiz();
+        renderFileList();
+      });
+
+      $('#btnRetryWrong')?.addEventListener('click', () => {
+        const wrongQs = f.questions.filter(qq => {
+          const k = String(qq.number);
+          return f.progress.checked[k] && !isAnswerCorrect(qq, f.progress.answers[k] || []);
+        });
+
+        if (wrongQs.length === 0) {
+          toast('Không có câu sai để làm lại!');
+          return;
+        }
+
+        for (const qq of wrongQs) {
+          const k = String(qq.number);
+          delete f.progress.answers[k];
+          delete f.progress.checked[k];
+        }
+
+        f.progress.showResults = false;
+        f.progress.currentIndex = f.questions.indexOf(wrongQs[0]);
+        saveProgress(activeFileId);
+        renderQuiz();
+        renderFileList();
+        toast(`Làm lại ${wrongQs.length} câu sai`);
+      });
+
+      $('#btnReset')?.addEventListener('click', () => {
+        if (!confirm('Reset toàn bộ tiến trình file này?')) return;
+        f.progress = defaultProgress();
+        saveProgress(activeFileId);
+        renderQuiz();
+        renderFileList();
+        toast('Đã reset tiến trình');
+      });
+    }
+
+    function renderResults() {
+      const f = files[activeFileId];
+      const stats = getStats(activeFileId);
+      const pct = stats.total ? Math.round((stats.correct / stats.total) * 100) : 0;
+
+      let emoji = '🎉';
+      if (pct < 50) emoji = '💪';
+      else if (pct < 80) emoji = '👍';
+
+      $('#mainBody').innerHTML = `
+        <div class="results-card">
+          <div style="font-size:48px">${emoji}</div>
+          <div class="results-score">${pct}%</div>
+          <p class="results-detail">
+            ${stats.correct} đúng · ${stats.wrong} sai · ${stats.total - stats.answered} chưa làm
+            <br>trên tổng ${stats.total} câu
+          </p>
+          <div class="results-actions">
+            <button class="btn btn-primary" id="btnReview">Xem lại từng câu</button>
+            <button class="btn btn-secondary" id="btnRetryWrongResult">Làm lại câu sai (${stats.wrong})</button>
+            <button class="btn btn-danger" id="btnResetResult">Làm lại từ đầu</button>
+          </div>
+        </div>`;
+
+      $('#btnReview')?.addEventListener('click', () => {
+        f.progress.showResults = false;
+        f.progress.currentIndex = 0;
+        saveProgress(activeFileId);
+        renderQuiz();
+      });
+
+      $('#btnRetryWrongResult')?.addEventListener('click', () => {
+        f.progress.showResults = false;
+        const wrongQs = f.questions.filter(qq => {
+          const k = String(qq.number);
+          return f.progress.checked[k] && !isAnswerCorrect(qq, f.progress.answers[k] || []);
+        });
+        for (const qq of wrongQs) {
+          const k = String(qq.number);
+          delete f.progress.answers[k];
+          delete f.progress.checked[k];
+        }
+        f.progress.currentIndex = wrongQs.length ? f.questions.indexOf(wrongQs[0]) : 0;
+        saveProgress(activeFileId);
+        renderQuiz();
+      });
+
+      $('#btnResetResult')?.addEventListener('click', () => {
+        if (!confirm('Làm lại từ đầu?')) return;
+        f.progress = defaultProgress();
+        saveProgress(activeFileId);
+        renderQuiz();
+        renderFileList();
+      });
+    }
+
+    async function init() {
+      const meta = loadFilesMeta();
+
+      for (const [id, info] of Object.entries(meta)) {
+        const content = localStorage.getItem(contentKey(id));
+        if (!content) continue;
+
+        const questions = parseMarkdown(content);
+        if (questions.length === 0) continue;
+
+        files[id] = {
+          name: info.name,
+          basePath: info.basePath || '',
+          path: info.path || '',
+          questions,
+          importedAt: info.importedAt,
+          progress: loadProgress(id)
+        };
+      }
+
+      if (window.BUNDLE?.md) {
+        loadBundledQuizzes();
+      } else {
+        await loadManifestQuizzes();
+      }
+
+      renderFileList();
+
+      const ids = Object.keys(files);
+      if (ids.length > 0) {
+        activeFileId = ids[ids.length - 1];
+        renderQuiz();
+      }
+
+      const sidebar = $('.sidebar');
+      const importBtn = $('#importBtn');
+      const input = $('#fileInput');
+
+      importBtn.addEventListener('click', () => input.click());
+      setupConfirmModal();
+      $('#clearStorageBtn').addEventListener('click', openClearProgressModal);
+
+      input.addEventListener('change', () => {
+        [...input.files].forEach(importFile);
+        input.value = '';
+      });
+
+      sidebar.addEventListener('dragover', (e) => { e.preventDefault(); sidebar.classList.add('dragover'); });
+      sidebar.addEventListener('dragleave', (e) => {
+        if (!sidebar.contains(e.relatedTarget)) sidebar.classList.remove('dragover');
+      });
+      sidebar.addEventListener('drop', (e) => {
+        e.preventDefault();
+        sidebar.classList.remove('dragover');
+        [...e.dataTransfer.files].filter(f => f.name.endsWith('.md') || f.name.endsWith('.txt')).forEach(importFile);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
