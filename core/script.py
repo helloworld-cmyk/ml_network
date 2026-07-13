@@ -23,7 +23,7 @@ import ollama  # pyright: ignore[reportMissingImports]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_IMAGES_DIR = PROJECT_ROOT / "rawtext" / "_preview_pages1"
-DEFAULT_OUTPUT_TEXT_PATH = PROJECT_ROOT / ".md" / "ck_2022_23.md"
+DEFAULT_OUTPUT_TEXT_PATH = PROJECT_ROOT / ".md" / "20211.md"
 DEFAULT_MODEL = "minimax-m3:cloud"
 DEFAULT_PROMPT_PATH = PROJECT_ROOT / "prompt" / "prompt.md"
 
@@ -413,6 +413,22 @@ def resolve_last_question_for_page(
 	return None
 
 
+def _print_req_banner(prefix: str, label: str) -> None:
+	print(f"\n{'=' * 64}", flush=True)
+	print(f"  {prefix} {label}", flush=True)
+	print(f"{'=' * 64}", flush=True)
+
+
+def _print_req_input(prefix: str, image_path: Path, prompt: str) -> None:
+	"""In input của request hiện tại (prompt text; ảnh chỉ ghi tên, không dump base64)."""
+	_print_req_banner(prefix, "INPUT")
+	print(f"Ảnh: {image_path.name}", flush=True)
+	print(f"Prompt ({len(prompt)} ký tự):", flush=True)
+	print("-" * 40, flush=True)
+	print(prompt, flush=True)
+	print("-" * 40, flush=True)
+
+
 def _print_pull_progress(info: Any) -> None:
 	status = _get(info, "status") or ""
 	completed = _get(info, "completed")
@@ -458,6 +474,7 @@ def ocr_image(
 	image_data = image_file_to_base64(image_path)
 	prefix = f"[Trang {page_index}/{page_total}]"
 	context_note = " (+ context câu cuối từ question.md)" if has_last_context else ""
+	_print_req_input(prefix, image_path, prompt)
 	print(f"{prefix} Đang gửi ảnh và xử lý prompt{context_note}...", flush=True)
 
 	stop_heartbeat = threading.Event()
@@ -504,20 +521,18 @@ def ocr_image(
 					stop_heartbeat.set()
 					generating = True
 					elapsed = time.monotonic() - started
+					# Xóa dòng heartbeat rồi mở section STREAM OUTPUT của request này.
+					print(f"\r{' ' * 80}\r", end="", flush=True)
 					print(
-						f"\r{prefix} Prompt xong sau {elapsed:.1f}s — đang sinh token...",
+						f"{prefix} Prompt xong sau {elapsed:.1f}s — bắt đầu stream:",
 						flush=True,
 					)
+					_print_req_banner(prefix, "STREAM OUTPUT")
 
 				parts.append(content)
 				token_chunks += 1
-				elapsed = time.monotonic() - started
-				chars = sum(len(part) for part in parts)
-				print(
-					f"\r{prefix} Đang sinh... ~{token_chunks} chunk | {chars} ký tự | {elapsed:.1f}s",
-					end="",
-					flush=True,
-				)
+				# In trực tiếp token stream (không \r ghi đè) — request sau sẽ mở banner mới.
+				print(content, end="", flush=True)
 	finally:
 		stop_heartbeat.set()
 		heartbeat_thread.join(timeout=1.0)
@@ -538,7 +553,9 @@ def ocr_image(
 			tps = eval_tokens / (eval_duration / 1e9)
 			stats.append(f"{tps:.1f} tok/s")
 
-	print(f"\r{prefix} Xong OCR ({', '.join(stats)}).{' ' * 20}", flush=True)
+	if generating:
+		print(flush=True)  # kết thúc dòng stream
+	_print_req_banner(prefix, f"DONE ({', '.join(stats)}) | {token_chunks} chunk")
 	return text
 
 

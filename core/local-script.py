@@ -1,37 +1,65 @@
-"""OCR ảnh trang PDF (từ folder _preview_pages) sang text bằng LM Studio (OpenAI-compatible).
+"""OCR 2 giai đoạn: LM Studio (raw OCR) → proxy (format chi tiết).
 
-Mỗi lần gửi 2 ảnh (trang hiện tại + trang kế) nhưng chỉ trích xuất câu hỏi từ ảnh đầu.
-Kèm câu hỏi trước đó (text) làm context cho AI.
+Giai đoạn 1 — LM Studio (local): gửi ảnh + prompt đơn giản "trích xuất câu hỏi"
+            → nhận text thô (chưa format).
+Giai đoạn 2 — Proxy (servernvidia): forward text thô + prompt.md chi tiết
+            → nhận output đã format đúng (Câu N: / A. / ans:).
+
+Pipeline: G1 và G2 chạy song song qua hàng đợi — khi G1 xong trang N thì làm
+ngay trang N+1 trong lúc G2 đang format trang N (model local không rảnh chờ).
 
 Usage:
   python core/local-script.py
   python core/local-script.py -o .md/output.txt
   python core/local-script.py --start-page 8
-  python core/local-script.py --images-dir rawtext/_preview_pages --model local-model
-  python core/local-script.py --base-url http://localhost:1234/v1
+  python core/local-script.py --images-dir rawtext/_preview_pages1 --model local-model
+  python core/local-script.py --local-base-url http://localhost:1234/v1
+  python core/local-script.py --proxy-base-url http://127.0.0.1:1235/v1 --proxy-model minimax-m3
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import os
 import re
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from queue import Empty, Queue
 from typing import Any
 
 from openai import OpenAI  # pyright: ignore[reportMissingImports]
 
+# Khóa in tiến trình khi G1/G2 chạy song song (tránh \r đè lên nhau loạn).
+_PRINT_LOCK = threading.Lock()
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_IMAGES_DIR = PROJECT_ROOT / "rawtext" / "_preview_pages1"
-DEFAULT_OUTPUT_TEXT_PATH = PROJECT_ROOT / ".md" / "ck_2022_23.md"
-DEFAULT_MODEL = "local-model"
-DEFAULT_BASE_URL = "http://localhost:1234/v1"
-DEFAULT_API_KEY = "lm-studio"
-DEFAULT_PROMPT_PATH = PROJECT_ROOT / "prompt" / "prompt-local.md"
+DEFAULT_IMAGES_DIR = PROJECT_ROOT / "rawtext" / "_preview_pages"
+DEFAULT_OUTPUT_TEXT_PATH = PROJECT_ROOT / ".md" / "20222.md"
+
+# Giai đoạn 1 — LM Studio (raw OCR, prompt đơn giản)
+DEFAULT_LOCAL_MODEL = "local-model"
+DEFAULT_LOCAL_BASE_URL = "http://localhost:1234/v1"
+DEFAULT_LOCAL_API_KEY = "lm-studio"
+LOCAL_OCR_PROMPT = (
+    "Trích xuất CHÍNH XÁC toàn bộ câu hỏi trắc nghiệm có trong ảnh thành text. "
+    "CHỈ trích xuất những gì nhìn thấy rõ trong ảnh — KHÔNG tự thêm, KHÔNG bịa câu hỏi, "
+    "KHÔNG suy đoán hay điền vào chỗ thiếu. Nếu chữ bị mờ/khuất thì giữ nguyên trạng thái "
+    "thô (để trống hoặc ghi [không rõ]), không đoán."
+)
+
+# Giai đoạn 2 — Proxy (format chi tiết với prompt.md)
+DEFAULT_PROXY_MODEL = "minimax-m3"
+DEFAULT_PROXY_BASE_URL = os.environ.get(
+	"PROXY_BASE_URL",
+	os.environ.get("OPENAI_BASE_URL", "http://127.0.0.1:1235/v1"),
+)
+DEFAULT_PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "local")
+DEFAULT_PROMPT_PATH = PROJECT_ROOT / "prompt" / "prompt.md"
 
 QUESTION_START_RE = re.compile(r"(?m)^Câu\s+\d+\s*:")
 OPTION_A_RE = re.compile(r"(?m)^A\.\s*")
@@ -192,43 +220,44 @@ def extract_question_number(question_block: str) -> int | None:
 	return int(match.group(1))
 
 
-def build_dual_image_section(
+def build_local_ocr_prompt(
 	*,
 	page_index: int,
 	has_context_image: bool,
 ) -> str:
-	"""Hướng dẫn model: 2 ảnh — chỉ trích xuất câu từ ảnh đầu."""
+	"""Prompt cho giai đoạn 1 (LM Studio raw OCR) — nhấn mạnh chống bịa câu."""
 	if has_context_image:
 		return (
-			"## Hai ảnh đính kèm (theo thứ tự)\n\n"
-			f"1. **Ảnh 1 — Trang {page_index} (trang cần trích xuất):** "
-			"**Chỉ** xuất câu hỏi nằm trên ảnh này.\n"
-			f"2. **Ảnh 2 — Trang {page_index + 1} (chỉ tham khảo):** "
-			"Dùng để hiểu ranh giới trang và hoàn thiện câu bị cắt ở **cuối ảnh 1**. "
-			"**Không** xuất câu hỏi chỉ xuất hiện trên ảnh 2.\n\n"
-			"**Bắt buộc:** Output chỉ chứa câu thuộc ảnh 1. "
-			"Ảnh 2 giúp ghép phần còn lại của câu dở ở cuối ảnh 1 — không trích xuất câu mới từ ảnh 2."
+			f"{LOCAL_OCR_PROMPT}\n\n"
+			f"Ảnh 1 là trang {page_index} — CHỈ trích xuất câu hỏi từ ảnh này. "
+			f"Ảnh 2 là trang {page_index + 1} — CHỈ dùng để tham khảo nối phần đuôi "
+			f"câu bị cắt ở cuối ảnh 1, KHÔNG trích xuất câu mới từ ảnh 2. "
+			f"Tuyệt đối KHÔNG bịa thêm câu hỏi nào không có trong ảnh 1."
 		)
 	return (
-		"## Một ảnh đính kèm\n\n"
-		f"Chỉ có **ảnh Trang {page_index}** (trang cuối, không có trang kế). "
-		"Trích xuất tất cả câu hỏi trên ảnh này."
+		f"{LOCAL_OCR_PROMPT}\n\n"
+		f"Đây là trang {page_index} (trang cuối). "
+		f"CHỈ trích xuất câu hỏi từ ảnh này, KHÔNG bịa thêm."
 	)
 
 
-def build_page_prompt(
+def build_proxy_format_prompt(
 	base_prompt: str,
+	raw_ocr_text: str,
 	last_question: str | None,
-	*,
-	page_index: int,
-	has_context_image: bool,
 ) -> str:
-	"""Ghép context câu trước + hướng dẫn 2 ảnh vào prompt trang hiện tại."""
-	image_section = build_dual_image_section(
-		page_index=page_index,
-		has_context_image=has_context_image,
-	)
-	parts = [base_prompt, image_section]
+	"""Ghép prompt.md chi tiết + raw OCR text + context câu trước cho giai đoạn 2 (proxy).
+
+	Proxy nhận text thô từ LM Studio và format lại đúng theo prompt.md.
+	"""
+	parts = [
+		base_prompt,
+		"## Văn bản OCR thô (từ model local — cần format lại)\n\n"
+		"Đây là kết quả OCR thô từ model local. Nhiệm vụ của bạn là **format lại** "
+		"theo đúng quy tắc trong prompt trên: thêm `Câu N:`, `A.`, `ans:` nếu thiếu, "
+		"sửa lỗi OCR rõ ràng, ghép câu bị cắt, và bọc trong khối ` ```md `.\n\n"
+		f"```text\n{raw_ocr_text.strip()}\n```",
+	]
 
 	if not last_question:
 		return "\n\n".join(parts)
@@ -237,50 +266,43 @@ def build_page_prompt(
 	question_label = f"Câu {question_num}" if question_num is not None else "Câu ?"
 	next_label = f"Câu {question_num + 1}" if question_num is not None else "câu tiếp theo"
 	incomplete = is_incomplete_question(last_question)
-	context_image_hint = (
-		" Dùng **ảnh 2** (trang kế) nếu phần còn lại của câu nằm ở đầu trang sau."
-		if has_context_image
-		else ""
-	)
 
 	if incomplete:
 		status_note = (
 			f"{question_label} **chưa hoàn chỉnh** (thiếu nội dung / thiếu A/B/C/D / thiếu hoặc sai đáp án / bị cắt giữa trang). "
 			"**Phải sửa câu trước cho đúng** trước khi xuất câu mới. "
-			f"Ảnh 1 (và ảnh 2 nếu có) có thể chứa phần còn lại.{context_image_hint}"
+			"Văn bản OCR thô bên dưới có thể chứa phần còn lại."
 		)
 		rules = (
 			"**Bắt buộc khi câu cuối chưa hoàn chỉnh — SỬA câu trước cho đúng:**\n"
-			f"1. SỬA / GHÉP câu text bên dưới với phần còn lại trên **ảnh 1** (và **ảnh 2** nếu cần) "
+			f"1. SỬA / GHÉP câu text bên dưới với phần còn lại trong **văn bản OCR thô** "
 			f"thành **một {question_label} hoàn chỉnh và đúng** "
 			"(đủ nội dung + A/B/C/D... + `ans:` hợp lệ).\n"
 			"   - Thiếu / sai đáp án → điền hoặc sửa dòng `ans:` (thêm `[suy luận]` nếu cần).\n"
-			"   - Thiếu lựa chọn / nội dung bị cắt → bổ sung từ ảnh 1 hoặc đầu ảnh 2.\n"
+			"   - Thiếu lựa chọn / nội dung bị cắt → bổ sung từ văn bản OCR thô.\n"
 			"2. Xuất câu đã sửa/ghép đó **đầu tiên** trong code block ` ```md `.\n"
-			f"3. Sau đó mới xuất các câu mới trên **ảnh 1** (từ {next_label} hoặc theo đề gốc).\n"
+			f"3. Sau đó mới xuất các câu mới (từ {next_label} hoặc theo đề gốc).\n"
 			"4. **Không** xuất lại các câu đã hoàn chỉnh trước đó (chỉ xuất lại câu cuối đang sửa).\n"
-			"5. **Không** giữ marker `[câu bị cắt]` / `[tiếp từ trang trước]` / `[thiếu phần cuối]` trên câu đã sửa xong.\n"
-			"6. **Không** xuất câu chỉ có trên ảnh 2."
+			"5. **Không** giữ marker `[câu bị cắt]` / `[tiếp từ trang trước]` / `[thiếu phần cuối]` trên câu đã sửa xong."
 		)
 	else:
 		status_note = (
 			f"{question_label} **đã hoàn chỉnh** (đủ nội dung + đáp án). "
-			f"Tiếp tục trích xuất từ {next_label} trở đi — **chỉ** trên ảnh 1."
+			f"Tiếp tục trích xuất từ {next_label} trở đi theo văn bản OCR thô."
 		)
 		rules = (
 			"**Bắt buộc khi câu cuối đã hoàn chỉnh:**\n"
 			f"1. **Không** xuất lại {question_label} hoặc bất kỳ câu nào đã có trong output trước.\n"
-			f"2. Câu đầu tiên trên **ảnh 1** (nếu là câu mới) phải bắt đầu từ {next_label} hoặc đúng số trên đề gốc.\n"
-			"3. Chỉ xuất các câu **mới** xuất hiện trên **ảnh 1**.\n"
-			"4. Giữ liên tục số thứ tự — không nhảy số, không lặp số.\n"
-			"5. Dùng ảnh 2 chỉ để xác định ranh giới — **không** xuất câu chỉ có trên ảnh 2."
+			f"2. Câu đầu tiên (nếu là câu mới) phải bắt đầu từ {next_label} hoặc đúng số trên đề gốc.\n"
+			"3. Chỉ xuất các câu **mới** xuất hiện trong văn bản OCR thô.\n"
+			"4. Giữ liên tục số thứ tự — không nhảy số, không lặp số."
 		)
 
 	parts.extend(
 		[
 			"## Context: câu hỏi cuối cùng trong file output (question.md)\n\n"
 			"Pipeline gửi kèm **câu hỏi trước đó** (text) để bạn biết đã làm đến câu nào "
-			"và câu đó đã xong hay chưa. Kết hợp với **ảnh 1** (+ ảnh 2 nếu có) để trích xuất đúng.\n\n"
+			"và câu đó đã xong hay chưa.\n\n"
 			f"{status_note}\n\n"
 			f"{rules}\n\n"
 			"### Câu hỏi cuối cùng đã trích xuất\n\n"
@@ -451,6 +473,63 @@ def ask_start_page(
 	return start_page
 
 
+def ask_proxy_model(
+	proxy_client: OpenAI,
+	cli_proxy_model: str | None,
+) -> str:
+	"""Hỏi tương tác chọn model proxy nếu không truyền --proxy-model.
+
+	Giống mục 5 (core/proxy.py): hiện danh sách đánh số, gõ số hoặc id.
+	"""
+	print("Đang lấy danh sách model từ proxy...", flush=True)
+	try:
+		models = proxy_client.models.list()
+		available = [item.id for item in models.data]
+	except Exception as exc:  # noqa: BLE001
+		print(f"  Không lấy được danh sách model từ proxy: {exc}", file=sys.stderr)
+		available = []
+
+	suggested = DEFAULT_PROXY_MODEL
+	if suggested not in available and available:
+		suggested = available[0]
+
+	if cli_proxy_model is not None:
+		if available and cli_proxy_model not in available:
+			print(
+				f"Cảnh báo: '{cli_proxy_model}' không có trong /v1/models "
+				f"({', '.join(available[:12])}{'…' if len(available) > 12 else ''}). "
+				"Vẫn gửi request — proxy có thể từ chối.",
+				file=sys.stderr,
+			)
+		return cli_proxy_model
+
+	if not available:
+		print(f"  Proxy không trả về model nào. Sẽ dùng mặc định '{suggested}'.", flush=True)
+		return suggested
+
+	print(f"\nModels từ proxy ({proxy_client.base_url}):", flush=True)
+	for index, model_id in enumerate(available, start=1):
+		marker = " ← mặc định" if model_id == suggested else ""
+		print(f"  {index:2d}. {model_id}{marker}", flush=True)
+
+	while True:
+		raw = input(
+			f"Chọn model proxy [1-{len(available)}] hoặc nhập id "
+			f"(Enter = {suggested}): "
+		).strip()
+		if not raw:
+			return suggested
+		if raw.isdigit():
+			choice = int(raw)
+			if 1 <= choice <= len(available):
+				return available[choice - 1]
+			print(f"Chọn số từ 1 đến {len(available)}.", flush=True)
+			continue
+		if raw in available:
+			return raw
+		print(f"Model '{raw}' không có trong danh sách. Chọn lại.", flush=True)
+
+
 def resolve_last_question_for_page(
 	output_path: Path,
 	page_index: int,
@@ -464,8 +543,8 @@ def resolve_last_question_for_page(
 	return None
 
 
-def ensure_server_ready(client: OpenAI, model: str) -> None:
-	"""Kiểm tra LM Studio đang chạy và model có sẵn."""
+def ensure_local_ready(client: OpenAI, model: str) -> None:
+	"""Kiểm tra LM Studio đang chạy và model có sẵn (giai đoạn 1)."""
 	print(f"Đang kết nối LM Studio và kiểm tra model '{model}'...")
 	started = time.monotonic()
 
@@ -477,7 +556,7 @@ def ensure_server_ready(client: OpenAI, model: str) -> None:
 			if model not in available and model != "local-model":
 				print(
 					f"  Cảnh báo: '{model}' không nằm trong danh sách. "
-					"LM Studio thường dùng tên model đang load — thử --model với id ở trên.",
+					"LM Studio thường dùng tên model đang load — thử --local-model với id ở trên.",
 					file=sys.stderr,
 				)
 		else:
@@ -498,48 +577,54 @@ def ensure_server_ready(client: OpenAI, model: str) -> None:
 	print(f"Đã sẵn sàng model '{model}' ({time.monotonic() - started:.1f}s).")
 
 
-def ocr_image(
+def ensure_proxy_ready(client: OpenAI, model: str) -> None:
+	"""Kiểm tra proxy sống và model có sẵn (giai đoạn 2)."""
+	print(f"Đang kết nối proxy và kiểm tra model '{model}'...")
+	started = time.monotonic()
+
+	try:
+		models = client.models.list()
+		available = [item.id for item in models.data]
+		if available:
+			print(f"  Proxy models có sẵn: {', '.join(available)}")
+			if model not in available:
+				print(
+					f"  Cảnh báo: '{model}' không nằm trong danh sách proxy.",
+					file=sys.stderr,
+				)
+		else:
+			print("  Cảnh báo: proxy /v1/models trống.", file=sys.stderr)
+	except Exception as exc:  # noqa: BLE001
+		raise RuntimeError(
+			f"Không kết nối được proxy tại {client.base_url}. "
+			f"Chạy `python main.py` trong servernvidia rồi thử lại. Chi tiết: {exc}"
+		) from exc
+
+	print(f"Đã sẵn sàng proxy model '{model}' ({time.monotonic() - started:.1f}s).")
+
+
+def _stream_chat(
 	client: OpenAI,
-	image_path: Path,
 	model: str,
-	prompt: str,
+	message_content: list[dict[str, Any]] | str,
 	*,
-	page_index: int,
-	page_total: int,
-	context_image_path: Path | None = None,
-	has_last_context: bool = False,
+	prefix: str,
+	stage_label: str,
 ) -> str:
-	message_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
-	message_content.append(
-		{"type": "image_url", "image_url": {"url": image_file_to_data_url(image_path)}}
-	)
-	if context_image_path is not None:
-		message_content.append(
-			{
-				"type": "image_url",
-				"image_url": {"url": image_file_to_data_url(context_image_path)},
-			}
-		)
-
-	prefix = f"[Trang {page_index}/{page_total}]"
-	notes: list[str] = []
-	if context_image_path is not None:
-		notes.append(f"+ ảnh context {context_image_path.name}")
-	if has_last_context:
-		notes.append("+ câu trước (text)")
-	context_note = f" ({', '.join(notes)})" if notes else ""
-	print(f"{prefix} Đang gửi ảnh và xử lý prompt{context_note}...", flush=True)
-
+	"""Stream chat completion chung cho cả 2 giai đoạn. Trả về text đầy đủ."""
 	stop_heartbeat = threading.Event()
 	started = time.monotonic()
+
+	def _progress(msg: str, *, end: str = "\n") -> None:
+		with _PRINT_LOCK:
+			print(msg, end=end, flush=True)
 
 	def heartbeat() -> None:
 		while not stop_heartbeat.wait(1.0):
 			elapsed = time.monotonic() - started
-			print(
-				f"\r{prefix} Đang xử lý prompt (chưa sinh token)... {elapsed:.0f}s",
+			_progress(
+				f"\r{prefix} {stage_label}: đang xử lý (chưa sinh token)... {elapsed:.0f}s",
 				end="",
-				flush=True,
 			)
 
 	heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
@@ -550,10 +635,16 @@ def ocr_image(
 	generating = False
 	usage: Any = None
 
+	messages = (
+		[{"role": "user", "content": message_content}]
+		if isinstance(message_content, list)
+		else [{"role": "user", "content": message_content}]
+	)
+
 	try:
 		stream = client.chat.completions.create(
 			model=model,
-			messages=[{"role": "user", "content": message_content}],
+			messages=messages,
 			temperature=0,
 			stream=True,
 			stream_options={"include_usage": True},
@@ -576,19 +667,17 @@ def ocr_image(
 				stop_heartbeat.set()
 				generating = True
 				elapsed = time.monotonic() - started
-				print(
-					f"\r{prefix} Prompt xong sau {elapsed:.1f}s — đang sinh token...",
-					flush=True,
+				_progress(
+					f"\r{prefix} {stage_label}: prompt xong sau {elapsed:.1f}s — đang sinh token..."
 				)
 
 			parts.append(content)
 			token_chunks += 1
 			elapsed = time.monotonic() - started
 			chars = sum(len(part) for part in parts)
-			print(
-				f"\r{prefix} Đang sinh... ~{token_chunks} chunk | {chars} ký tự | {elapsed:.1f}s",
+			_progress(
+				f"\r{prefix} {stage_label}: ~{token_chunks} chunk | {chars} ký tự | {elapsed:.1f}s",
 				end="",
-				flush=True,
 			)
 	finally:
 		stop_heartbeat.set()
@@ -608,115 +697,277 @@ def ocr_image(
 			if elapsed > 0:
 				stats.append(f"{completion_tokens / elapsed:.1f} tok/s")
 
-	print(f"\r{prefix} Xong OCR ({', '.join(stats)}).{' ' * 20}", flush=True)
+	_progress(f"\r{prefix} {stage_label} xong ({', '.join(stats)}).{' ' * 20}")
 	return text
+
+
+@dataclass
+class _G1JobResult:
+	"""Kết quả G1 đưa vào hàng đợi cho G2. error != None → worker G1 lỗi."""
+
+	page_index: int
+	raw_text: str = ""
+	error: BaseException | None = None
+
+
+# Sentinel báo G1 đã hết việc (đặt vào queue sau trang cuối / sau lỗi).
+_G1_DONE = object()
+
+
+def stage1_raw_ocr(
+	local_client: OpenAI,
+	local_model: str,
+	image_path: Path,
+	context_image_path: Path | None,
+	*,
+	page_index: int,
+	page_total: int,
+) -> str:
+	"""Giai đoạn 1: gửi ảnh + prompt đơn giản đến LM Studio → text thô."""
+	prompt = build_local_ocr_prompt(
+		page_index=page_index,
+		has_context_image=context_image_path is not None,
+	)
+	message_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+	message_content.append(
+		{"type": "image_url", "image_url": {"url": image_file_to_data_url(image_path)}}
+	)
+	if context_image_path is not None:
+		message_content.append(
+			{
+				"type": "image_url",
+				"image_url": {"url": image_file_to_data_url(context_image_path)},
+			}
+		)
+
+	prefix = f"[Trang {page_index}/{page_total}]"
+	notes = f" + {context_image_path.name}" if context_image_path is not None else ""
+	print(f"{prefix} Giai đoạn 1 (LM Studio raw OCR){notes}...", flush=True)
+
+	return _stream_chat(
+		local_client,
+		local_model,
+		message_content,
+		prefix=prefix,
+		stage_label="G1-raw",
+	)
+
+
+def stage2_proxy_format(
+	proxy_client: OpenAI,
+	proxy_model: str,
+	raw_ocr_text: str,
+	format_prompt: str,
+	*,
+	page_index: int,
+	page_total: int,
+) -> str:
+	"""Giai đoạn 2: forward text thô + prompt.md đến proxy → output đã format."""
+	prefix = f"[Trang {page_index}/{page_total}]"
+	print(f"{prefix} Giai đoạn 2 (proxy format với prompt.md)...", flush=True)
+	return _stream_chat(
+		proxy_client,
+		proxy_model,
+		format_prompt,
+		prefix=prefix,
+		stage_label="G2-fmt",
+	)
 
 
 def images_to_text(
 	images_dir: Path,
 	output_path: Path,
-	model: str,
 	prompt: str,
-	base_url: str,
-	api_key: str,
+	*,
+	local_model: str,
+	local_base_url: str,
+	local_api_key: str,
+	proxy_model: str,
+	proxy_base_url: str,
+	proxy_api_key: str,
 	start_page: int | None = None,
 ) -> None:
 	image_paths = list_page_images(images_dir)
 	page_total = len(image_paths)
 	start_page = ask_start_page(page_total, output_path, start_page)
 
-	client = OpenAI(base_url=base_url, api_key=api_key)
-	ensure_server_ready(client, model)
+	local_client = OpenAI(base_url=local_base_url, api_key=local_api_key)
+	ensure_local_ready(local_client, local_model)
+
+	proxy_client = OpenAI(base_url=proxy_base_url, api_key=proxy_api_key)
+	# Hỏi tương tác chọn model proxy nếu không truyền --proxy-model
+	proxy_model = ask_proxy_model(proxy_client, proxy_model)
+	ensure_proxy_ready(proxy_client, proxy_model)
 
 	output_path.parent.mkdir(parents=True, exist_ok=True)
 	print(f"Đã tìm thấy {page_total} ảnh trong {images_dir}", flush=True)
 	print(f"Bắt đầu từ Page {start_page}, ghi nối tiếp vào: {output_path}", flush=True)
+	print(f"  G1 (raw OCR): {local_base_url} / model '{local_model}'", flush=True)
+	print(f"  G2 (format):  {proxy_base_url} / model '{proxy_model}'", flush=True)
+	print(
+		"  Pipeline: G1→queue→G2 (G1 làm trang kế ngay khi xong, không chờ G2).",
+		flush=True,
+	)
+
+	# maxsize=2: G1 được chạy trước tối đa ~2 trang; đủ overlap, không ứ bộ nhớ.
+	raw_queue: Queue[Any] = Queue(maxsize=2)
+	stop_g1 = threading.Event()
+
+	def g1_producer() -> None:
+		"""Worker G1: OCR liên tục, đẩy raw text vào hàng đợi cho G2."""
+		try:
+			for index in range(start_page, page_total + 1):
+				if stop_g1.is_set():
+					break
+
+				image_path = image_paths[index - 1]
+				context_image_path = image_paths[index] if index < page_total else None
+				with _PRINT_LOCK:
+					if context_image_path is not None:
+						print(
+							f"[Trang {index}/{page_total}] Đang xử lý {image_path.name} "
+							f"(ảnh 1) + {context_image_path.name} (ảnh 2, context)...",
+							flush=True,
+						)
+					else:
+						print(
+							f"[Trang {index}/{page_total}] Đang xử lý {image_path.name} "
+							f"(trang cuối, chỉ 1 ảnh)...",
+							flush=True,
+						)
+
+				try:
+					raw_text = stage1_raw_ocr(
+						local_client,
+						local_model,
+						image_path,
+						context_image_path,
+						page_index=index,
+						page_total=page_total,
+					)
+				except BaseException as exc:  # noqa: BLE001 — đẩy lỗi sang consumer
+					raw_queue.put(_G1JobResult(page_index=index, error=exc))
+					return
+
+				if not raw_text:
+					with _PRINT_LOCK:
+						print(
+							f"[Trang {index}/{page_total}] Cảnh báo: G1 trả về rỗng "
+							"— vẫn forward rỗng sang G2.",
+							file=sys.stderr,
+							flush=True,
+						)
+
+				raw_queue.put(_G1JobResult(page_index=index, raw_text=raw_text))
+		finally:
+			raw_queue.put(_G1_DONE)
+
+	g1_thread = threading.Thread(target=g1_producer, name="g1-ocr", daemon=True)
+	g1_thread.start()
 
 	session_last_page_text: str | None = None
 	processed_count = 0
+	pipeline_error: BaseException | None = None
 
-	for index in range(start_page, page_total + 1):
-		image_path = image_paths[index - 1]
-		context_image_path = image_paths[index] if index < page_total else None
-		if context_image_path is not None:
-			print(
-				f"[Trang {index}/{page_total}] Đang xử lý {image_path.name} "
-				f"(ảnh 1) + {context_image_path.name} (ảnh 2, context)...",
-				flush=True,
+	try:
+		while True:
+			item = raw_queue.get()
+			if item is _G1_DONE:
+				break
+
+			assert isinstance(item, _G1JobResult)
+			index = item.page_index
+
+			if item.error is not None:
+				pipeline_error = item.error
+				stop_g1.set()
+				break
+
+			raw_text = item.raw_text
+
+			# Giai đoạn 2 — Proxy format với prompt.md + context câu trước
+			last_question = resolve_last_question_for_page(
+				output_path,
+				index,
+				start_page,
+				session_last_page_text,
 			)
-		else:
-			print(
-				f"[Trang {index}/{page_total}] Đang xử lý {image_path.name} "
-				f"(trang cuối, chỉ 1 ảnh)...",
-				flush=True,
+			was_incomplete = (
+				last_question is not None and is_incomplete_question(last_question)
+			)
+			format_prompt = build_proxy_format_prompt(prompt, raw_text, last_question)
+			if last_question:
+				question_num = extract_question_number(last_question)
+				status = "chưa hoàn chỉnh" if was_incomplete else "đã hoàn chỉnh"
+				label = f"Câu {question_num}" if question_num is not None else "câu cuối"
+				with _PRINT_LOCK:
+					print(
+						f"[Trang {index}/{page_total}] G2 gửi kèm {label} ({status}) "
+						f"làm context text ({len(last_question)} ký tự).",
+						flush=True,
+					)
+
+			text = stage2_proxy_format(
+				proxy_client,
+				proxy_model,
+				raw_text,
+				format_prompt,
+				page_index=index,
+				page_total=page_total,
 			)
 
-		last_question = resolve_last_question_for_page(
-			output_path,
-			index,
-			start_page,
-			session_last_page_text,
-		)
-		was_incomplete = (
-			last_question is not None and is_incomplete_question(last_question)
-		)
-		page_prompt = build_page_prompt(
-			prompt,
-			last_question,
-			page_index=index,
-			has_context_image=context_image_path is not None,
-		)
-		if last_question:
-			question_num = extract_question_number(last_question)
-			status = "chưa hoàn chỉnh" if was_incomplete else "đã hoàn chỉnh"
-			label = f"Câu {question_num}" if question_num is not None else "câu cuối"
-			print(
-				f"[Trang {index}/{page_total}] Gửi kèm {label} ({status}) "
-				f"làm context text ({len(last_question)} ký tự).",
-				flush=True,
-			)
+			# Câu bị cắt trang trước đã được AI ghép vào trang này → sửa stub ở Page trước
+			if was_incomplete and index > 1:
+				prev_page_body = get_page_body_from_file(output_path, index - 1)
+				if prev_page_body is not None:
+					patch_page_in_file(
+						output_path,
+						index - 1,
+						remove_trailing_incomplete(prev_page_body),
+					)
+					with _PRINT_LOCK:
+						print(
+							f"[Trang {index}/{page_total}] Đã gỡ câu chưa hoàn chỉnh "
+							f"khỏi Page {index - 1} "
+							"(bản đã sửa/đầy đủ nằm ở trang này).",
+							flush=True,
+						)
 
-		text = ocr_image(
-			client,
-			image_path,
-			model,
-			page_prompt,
-			page_index=index,
-			page_total=page_total,
-			context_image_path=context_image_path,
-			has_last_context=last_question is not None,
-		)
+			append_page_output(output_path, index, text)
+			session_last_page_text = text
+			processed_count += 1
 
-		# Câu bị cắt trang trước đã được AI ghép vào trang này → sửa stub ở Page trước
-		if was_incomplete and index > 1:
-			prev_page_body = get_page_body_from_file(output_path, index - 1)
-			if prev_page_body is not None:
-				patch_page_in_file(
-					output_path,
-					index - 1,
-					remove_trailing_incomplete(prev_page_body),
-				)
+			new_incomplete = get_trailing_incomplete(text)
+			with _PRINT_LOCK:
+				if new_incomplete:
+					question_num = extract_question_number(new_incomplete)
+					label = (
+						f"Câu {question_num}" if question_num is not None else "câu cuối"
+					)
+					print(
+						f"[Trang {index}/{page_total}] {label} chưa hoàn chỉnh — "
+						"sẽ gửi làm context cho trang sau.",
+						flush=True,
+					)
 				print(
-					f"[Trang {index}/{page_total}] Đã gỡ câu chưa hoàn chỉnh khỏi Page {index - 1} "
-					"(bản đã sửa/đầy đủ nằm ở trang này).",
+					f"[Trang {index}/{page_total}] Đã ghi nối tiếp vào {output_path.name}.",
 					flush=True,
 				)
+	except BaseException as exc:  # noqa: BLE001
+		pipeline_error = exc
+		stop_g1.set()
+	finally:
+		stop_g1.set()
+		# Xả queue để g1_producer không kẹt ở put() khi consumer dừng sớm.
+		while True:
+			try:
+				raw_queue.get_nowait()
+			except Empty:
+				break
+		g1_thread.join(timeout=5.0)
 
-		append_page_output(output_path, index, text)
-		session_last_page_text = text
-		processed_count += 1
-
-		new_incomplete = get_trailing_incomplete(text)
-		if new_incomplete:
-			question_num = extract_question_number(new_incomplete)
-			label = f"Câu {question_num}" if question_num is not None else "câu cuối"
-			print(
-				f"[Trang {index}/{page_total}] {label} chưa hoàn chỉnh — "
-				"sẽ gửi làm context cho trang sau.",
-				flush=True,
-			)
-
-		print(f"[Trang {index}/{page_total}] Đã ghi nối tiếp vào {output_path.name}.", flush=True)
+	if pipeline_error is not None:
+		raise pipeline_error
 
 	if session_last_page_text is not None:
 		final_incomplete = get_trailing_incomplete(session_last_page_text)
@@ -734,7 +985,10 @@ def images_to_text(
 
 def main() -> int:
 	parser = argparse.ArgumentParser(
-		description="OCR ảnh trang từ folder _preview_pages sang text bằng LM Studio"
+		description=(
+			"OCR 2 giai đoạn: LM Studio (raw OCR) → proxy (format chi tiết). "
+			"Chạy `python main.py` trong servernvidia trước khi dùng."
+		)
 	)
 	parser.add_argument(
 		"--images-dir",
@@ -747,25 +1001,42 @@ def main() -> int:
 		default=str(DEFAULT_OUTPUT_TEXT_PATH),
 		help="Đường dẫn file văn bản đầu ra",
 	)
+	# Giai đoạn 1 — LM Studio
 	parser.add_argument(
-		"--model",
-		default=DEFAULT_MODEL,
+		"--local-model",
+		default=DEFAULT_LOCAL_MODEL,
 		help="Tên model đang load trong LM Studio (xem Developer → Local Server)",
 	)
 	parser.add_argument(
-		"--base-url",
-		default=DEFAULT_BASE_URL,
-		help="URL OpenAI-compatible của LM Studio (mặc định http://localhost:1234/v1)",
+		"--local-base-url",
+		default=DEFAULT_LOCAL_BASE_URL,
+		help=f"URL OpenAI-compatible của LM Studio (mặc định {DEFAULT_LOCAL_BASE_URL})",
 	)
 	parser.add_argument(
-		"--api-key",
-		default=DEFAULT_API_KEY,
-		help="API key (LM Studio chấp nhận bất kỳ chuỗi nào)",
+		"--local-api-key",
+		default=DEFAULT_LOCAL_API_KEY,
+		help="API key LM Studio (chấp nhận bất kỳ chuỗi nào)",
+	)
+	# Giai đoạn 2 — Proxy
+	parser.add_argument(
+		"--proxy-model",
+		default=None,
+		help=f"Alias model trên proxy (mặc định: hỏi tương tác, fallback {DEFAULT_PROXY_MODEL})",
+	)
+	parser.add_argument(
+		"--proxy-base-url",
+		default=DEFAULT_PROXY_BASE_URL,
+		help=f"URL OpenAI-compatible của proxy (mặc định {DEFAULT_PROXY_BASE_URL})",
+	)
+	parser.add_argument(
+		"--proxy-api-key",
+		default=DEFAULT_PROXY_API_KEY,
+		help="API key gửi lên proxy (mặc định 'local', proxy bỏ qua)",
 	)
 	parser.add_argument(
 		"--prompt",
 		default=str(DEFAULT_PROMPT_PATH),
-		help="Đường dẫn file prompt (.md)",
+		help="Đường dẫn file prompt chi tiết cho giai đoạn 2 (mặc định prompt/prompt.md)",
 	)
 	parser.add_argument(
 		"--start-page",
@@ -781,14 +1052,18 @@ def main() -> int:
 
 	try:
 		prompt = load_prompt(prompt_path)
-		print(f"Đã load prompt từ: {prompt_path}", flush=True)
+		print(f"Đã load prompt chi tiết (G2) từ: {prompt_path}", flush=True)
+		print(f"Prompt raw OCR (G1): {LOCAL_OCR_PROMPT}", flush=True)
 		images_to_text(
 			images_dir,
 			output_path,
-			args.model,
 			prompt,
-			args.base_url,
-			args.api_key,
+			local_model=args.local_model,
+			local_base_url=args.local_base_url,
+			local_api_key=args.local_api_key,
+			proxy_model=args.proxy_model,
+			proxy_base_url=args.proxy_base_url,
+			proxy_api_key=args.proxy_api_key,
 			start_page=args.start_page,
 		)
 		return 0

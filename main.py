@@ -5,9 +5,10 @@ Usage:
   python main.py                  # menu tương tác
   python main.py list             # liệt kê lệnh
   python main.py capture -- --dpi 150
-  python main.py local -- -o .md/out.md --start-page 8
+  python main.py local -- --start-page 8
   python main.py ollama -- --model glm-ocr
-  python main.py mistral -- rawtext/ComputerNetwork_Quiz_Bank.pdf
+  python main.py nvidia -- --start-page 1
+  python main.py proxy -- --model minimax-m3
 """
 
 from __future__ import annotations
@@ -58,11 +59,18 @@ COMMANDS: tuple[Command, ...] = (
 		script=PROJECT_ROOT / "core" / "script.py",
 	),
 	Command(
-		key="mistral",
-		aliases=("mis", "mistral-ocr"),
-		label="OCR qua Mistral",
-		description="OCR PDF thẳng bằng Mistral Document QnA (core/mistral.py)",
-		script=PROJECT_ROOT / "core" / "mistral.py",
+		key="nvidia",
+		aliases=("nv", "minimax"),
+		label="OCR qua NVIDIA",
+		description="OCR ảnh bằng NVIDIA API / MiniMax-M3 (core/nvidia.py)",
+		script=PROJECT_ROOT / "core" / "nvidia.py",
+	),
+	Command(
+		key="proxy",
+		aliases=("px", "servernvidia"),
+		label="OCR qua servernvidia proxy",
+		description="OCR ảnh qua proxy local OpenAI-compatible (core/proxy.py)",
+		script=PROJECT_ROOT / "core" / "proxy.py",
 	),
 )
 
@@ -155,16 +163,15 @@ def build_parser() -> argparse.ArgumentParser:
 			"  python main.py\n"
 			"  python main.py list\n"
 			"  python main.py capture -- input.pdf -o rawtext/_preview_pages1\n"
-			"  python main.py local -- --start-page 8 -o .md/out.md\n"
-			"  python main.py ollama -- --model glm-ocr\n"
-			"  python main.py mistral -- rawtext/ComputerNetwork_Quiz_Bank.pdf --start-page 1\n"
+			"  python main.py local -- --start-page 8 -o .md/out.md\n"		"  python main.py local -- --local-model local-model --proxy-model minimax-m3\n"			"  python main.py ollama -- --model glm-ocr\n"
+			"  python main.py nvidia -- --start-page 1 -o .md/out.md\n"
+			"  python main.py proxy -- --model minimax-m3 --start-page 1\n"
 		),
 	)
 	sub = parser.add_subparsers(dest="action")
 
 	sub.add_parser("list", help="Liệt kê các lệnh có sẵn")
 	sub.add_parser("menu", help="Mở menu tương tác")
-
 	for cmd in COMMANDS:
 		p = sub.add_parser(
 			cmd.key,

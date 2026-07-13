@@ -18,8 +18,8 @@ from pdf2image import convert_from_path  # pyright: ignore[reportMissingImports]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_INPUT_PDF_PATH = PROJECT_ROOT / "rawtext" / "MMT-IT3080-CK20221_231.pdf"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "rawtext" / "_preview_pages1"
+DEFAULT_INPUT_PDF_PATH = PROJECT_ROOT / "rawtext" / "Mạng máy tính - cuối kì 20222.pdf"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "rawtext" / "_preview_pages"
 DEFAULT_DPI = 220
 DEFAULT_POPPLER_PATH = None
 

@@ -1,7 +1,13 @@
 {
   "quizzes": [
-    ".md/question.md",
+    ".md/20211.md",
+    ".md/20222.md",
+    ".md/ck2022-1.md",
     ".md/ck_2022_23.md",
-    ".md/filekhac.md"
+    ".md/mmt-chua-de-cac-ky backup.md",
+    ".md/mmt-chua-de-cac-ky.md",
+    ".md/nganhangcauhoi.md",
+    ".md/test.md",
+    ".md/thyngoc.md"
   ]
 }
